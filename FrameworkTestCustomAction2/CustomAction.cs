@@ -27,19 +27,14 @@ namespace FrameworkTest
         public static string nameVersion = String.Empty;
         public static string nameServicePack = String.Empty;
 
-        public static string output = String.Empty;           // Leerer String für die Ausgabe
-        public static string versionValue = String.Empty;     // leerer String für die Versionsnummer
-        public static string nextVersionValue = String.Empty; // leerer String für die Versionsnummer
+        public static string output = String.Empty;            // Leerer String für die Ausgabe
+        public static string versionValue = String.Empty;      // leerer String für die Versionsnummer
+        public static string foundVersionValue = String.Empty; // leerer String für die Versionsnummer
 
         [CustomAction]
         public static ActionResult FrameworkTest(Session session)
         {
             // Definition der Variablen
-
-            // Mindest-Versionsnummern von .NET Framework und .NET Core
-
-            Version minVersionDotNetFramework = new Version(4, 8);
-            Version minVersionDotNetCore = new Version(3, 1, 14);
 
             session["DOTNETFRAMEWORKVERSION"] = ".NET Framework nicht gefunden.";
             session["DOTNETCOREVERSION"] = ".NET Core nicht gefunden.";
@@ -98,23 +93,29 @@ namespace FrameworkTest
                 {
                     releaseKey = (int)registryKey.GetValue("Release");
 
-                    if (releaseKey >= 378389) CustomActions.versionValue = "4.5";
-                    if (releaseKey >= 378675) CustomActions.versionValue = "4.5.1";
-                    if (releaseKey >= 379893) CustomActions.versionValue = "4.5.2";
-                    if (releaseKey >= 393295) CustomActions.versionValue = "4.6";
-                    if (releaseKey >= 394254) CustomActions.versionValue = "4.6.1";
-                    if (releaseKey >= 394802) CustomActions.versionValue = "4.6.2";
-                    if (releaseKey >= 460798) CustomActions.versionValue = "4.7";
-                    if (releaseKey >= 461308) CustomActions.versionValue = "4.7.1";
-                    if (releaseKey >= 461808) CustomActions.versionValue = "4.7.2";
                     if (releaseKey >= 528040)
                     {
-                        CustomActions.versionValue = "4.8";
+                        versionValue = "4.8";
                         session["DOTNETFRAMEWORK48"] = "1";     // grünes statt rotes Icon im WiX-Dialog anzeigen
                     }
+                    else if (releaseKey >= 461808) versionValue = "4.7.2";
+                    else if (releaseKey >= 461308) versionValue = "4.7.1";
+                    else if (releaseKey >= 460798) versionValue = "4.7";
+                    else if (releaseKey >= 394802) versionValue = "4.6.2";
+                    else if (releaseKey >= 394254) versionValue = "4.6.1";
+                    else if (releaseKey >= 393295) versionValue = "4.6";
+                    else if (releaseKey >= 379893) versionValue = "4.5.2";
+                    else if (releaseKey >= 378675) versionValue = "4.5.1";
+                    else if (releaseKey >= 378389) versionValue = "4.5";
 
-                    session["DOTNETFRAMEWORKVERSION"] = ".NET Framework " + CustomActions.versionValue + " gefunden.";
+                    session["DOTNETFRAMEWORKVERSION"] = ".NET Framework " + versionValue + " gefunden.";
+
                 }
+            }
+
+            if (session["DOTNETFRAMEWORK48"] == "0")
+            {
+                session["DOTNETFRAMEWORKVERSION"] += " Erforderlich ist .NET Framework 4.8.";
             }
 
             // Versionsnummer für .NET Core suchen:
@@ -123,6 +124,10 @@ namespace FrameworkTest
 
             output = string.Empty;          // Leerer String für die Ausgabe
             versionValue = string.Empty;    // leerer String für die Versionsnummer
+
+            Version version        = new Version(0, 0);
+            Version minVersion     = new Version(3, 1, 15);
+            Version tooHighVersion = new Version(5, 0);
 
             // String für den Programm-Aufruf an der Kommandozeile, hier also
             //   cmd /c dotnet --list-runtimes
@@ -165,22 +170,20 @@ namespace FrameworkTest
                 p.WaitForExit();    // Warten auf Beendigung des Prozesses
 
                 // Wenn der Prozess nicht erfolgreich beendet wurde (dann wäre der ExitCode = 0),
-                // dann wird die Session-Variable "DOTNETCORE3114" des WiX-Skripts auf Null gesetzt.
+                // dann wird die Session-Variable "DOTNETCORE3115" des WiX-Skripts auf Null gesetzt.
                 // Als Rückgabewert wird aber trotzdem "Success" zurückgegeben.
 
                 if (p.ExitCode != 0)
                 {
-                    session["DOTNETCORE3114"] = "0";
+                    session["DOTNETCORE3115"] = "0";
                     session["DOTNETCOREVERSION"] = ".NET Core nicht gefunden.";
+                    session["DOTNETCOREVERSION"] += " Erforderlich ist .NET Core 3.1.15.";
 
                     return ActionResult.Success;
                 }
 
                 // In die Session-Variable "DOTNETCOREVERSION" wird ein String mit der gefundenen
                 // Versionsnummer geschrieben, der dann im Dialogfenster angezeigt wird.
-
-                Version version = new Version(0, 0);
-                Version tooHighVersion = new Version(5, 0);
 
                 int majorNumber;
                 int minorNumber;
@@ -200,9 +203,9 @@ namespace FrameworkTest
                     {
                         Match m = pattern.Match(runtimeLine);               // prüfen, ob Versionsnummer enthalten ist
 
-                        nextVersionValue = m.Value;                         // Versionsnummer in String-Objekt einlesen
+                        foundVersionValue = m.Value;                         // Versionsnummer in String-Objekt einlesen
 
-                        // An dieser Stelle stand ursprünglich "Version.TryParse(nextVersionValue, out nextVersion)".
+                        // An dieser Stelle stand ursprünglich "Version.TryParse(foundVersionValue, out foundVersion)".
                         // Das funktioniert aber nur mit neueren .NET Framework-Versionen. Ich hatte zunächst diese
                         // CustomAction für .NET Framework 4.8 kompiliert, dort funktionierte Version.TryParse() auch.
                         // Allerdings nur, wenn 4.8 auch auf dem Zielrechner installiert war, sonst wurde das Programm
@@ -210,38 +213,42 @@ namespace FrameworkTest
                         // Die vorliegende Version "FrameworkTestCustonAction2" ist für .NET Framework 2.0 kompiliert
                         // und liefert ein korrektes Ergebnis, wenn auf dem Zielrechner 2.0 oder höher installiert ist.
                         // Die "Version.TryParse()"-Methode habe ich hier nachprogrammiert.
-                        // Der String nextVersionValue enthält zu Beginn eine Versionsnummer im Format "3.1.14".
+                        // Der String foundVersionValue enthält zu Beginn eine Versionsnummer im Format "3.1.15".
 
-                        string[] myParse = nextVersionValue.Split('.');
+                        string[] myParse = foundVersionValue.Split('.');
                         Int32.TryParse(myParse[0], out majorNumber);
                         Int32.TryParse(myParse[1], out minorNumber);
                         Int32.TryParse(myParse[2], out revisionNumber);
 
-                        Version nextVersion = new Version(majorNumber, minorNumber, revisionNumber);
+                        Version foundVersion = new Version(majorNumber, minorNumber, revisionNumber);
 
                         // Die Versionsnummer soll gespeichert werden, wenn sie größer ist als die zuletzt gefundenen,
                         // aber kleiner als 5 (das wäre nicht mehr .NET Core, sondern .NET 5, und danach wird nicht gesucht.
                         // Der Kommandozeilen-Befehl "dotnet" unterscheidet nicht zwischen .NET Core und .NET 5.
 
-                        if ((nextVersion > version) && (nextVersion < tooHighVersion))
+                        if ((foundVersion > version) && (foundVersion < tooHighVersion))
                         {
-                            version = nextVersion;
-                            versionValue = nextVersionValue;
+                            version = foundVersion;
+                            versionValue = foundVersionValue;
+                            session["DOTNETCOREVERSION"] = ".NET Core " + versionValue + " gefunden.";
                         }
                     }
                 }
-
-                // Zum Schluss wird geprüft, ob die Versionsnummer ausreicht und die WiX-Properties werden geschrieben.
-
-                if (version >= minVersionDotNetCore)
-                {
-                    session["DOTNETCORE3114"] = "1";            // grünes statt rotes Icon im WiX-Dialog anzeigen
-                }
-
-                session["DOTNETCOREVERSION"] = ".NET Core " + versionValue + " gefunden.";
-
-                return ActionResult.Success;
             }
+
+            // Zum Schluss wird geprüft, ob die Versionsnummer ausreicht und die WiX-Properties werden geschrieben.
+
+            if (version >= minVersion)
+            {
+                session["DOTNETCORE3115"] = "1";            // grünes statt rotes Icon im WiX-Dialog anzeigen
+            }
+
+            if (session["DOTNETCORE3115"] == "0")
+            {
+                session["DOTNETCOREVERSION"] += " Erforderlich ist .NET Core 3.1.15.";
+            }
+
+            return ActionResult.Success;
         }
     }
 }
