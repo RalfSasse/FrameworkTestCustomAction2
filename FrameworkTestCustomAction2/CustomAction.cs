@@ -1,7 +1,7 @@
 /******************************************************************************
  * FrameworkTestCustomAction2.cs
  * Projekt FrameworkTest / CustomAction für WiX
- * Datum: 31.05.2021
+ * Datum: 07.06.2021
  * Autor: Ralf Sasse
  * 
  ******************************************************************************/
@@ -20,9 +20,9 @@ namespace FrameworkTest
     public class CustomActions
     {
         public static string dotNetCoreTest = String.Empty;
-        public static string dotNetCoreVersion = String.Empty;
+        public static string DOTNETCOREVORHANDEN = String.Empty;
         public static string dotNetFrameworkTest = String.Empty;
-        public static string dotNetFrameworkVersion = String.Empty;
+        public static string DOTNETFRAMEWORKVORHANDEN = String.Empty;
 
         public static string nameVersion = String.Empty;
         public static string nameServicePack = String.Empty;
@@ -36,8 +36,10 @@ namespace FrameworkTest
         {
             // Definition der Variablen
 
-            session["DOTNETFRAMEWORKVERSION"] = ".NET Framework nicht gefunden.";
-            session["DOTNETCOREVERSION"] = ".NET Core nicht gefunden.";
+            session["DOTNETFRAMEWORKVORHANDEN"] = ".NET Framework nicht vorhanden.";
+            session["DOTNETCOREVORHANDEN"] = ".NET Core nicht vorhanden.";
+            session["DOTNETFRAMEWORKERFORDERLICH"] = ".NET Framework 4.8";
+            session["DOTNETCOREERFORDERLICH"] = ".NET Core 3.1.15";
 
             int releaseKey = 0;
 
@@ -50,16 +52,16 @@ namespace FrameworkTest
 
             using (RegistryKey registryKey = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\NET Framework Setup\NDP\"))
             {
-                foreach (string dotNetFrameworkVersionKey in registryKey.GetSubKeyNames())
+                foreach (string DOTNETFRAMEWORKVORHANDENKey in registryKey.GetSubKeyNames())
                 {
-                    if (dotNetFrameworkVersionKey == "v4")              // .NET Framework Version >= 4.5
+                    if (DOTNETFRAMEWORKVORHANDENKey == "v4")              // .NET Framework Version >= 4.5
                     {                                                   // (werden weiter unten behandelt)
                         continue;
                     }
 
-                    if (dotNetFrameworkVersionKey.StartsWith("v"))      // .NET Framework Version <= 4
+                    if (DOTNETFRAMEWORKVORHANDENKey.StartsWith("v"))      // .NET Framework Version <= 4
                     {
-                        RegistryKey versionKey = registryKey.OpenSubKey(dotNetFrameworkVersionKey);
+                        RegistryKey versionKey = registryKey.OpenSubKey(DOTNETFRAMEWORKVORHANDENKey);
 
                         // .NET Framework Versionsnummer ermitteln:
 
@@ -78,7 +80,7 @@ namespace FrameworkTest
                             // Session-Variable mit der höchsten Versionsnummer bis einschließlich 4 füllen.
                             // Wird weiter unten überschrieben, falls eine neuere Version gefunden wird.
 
-                            session["DOTNETFRAMEWORKVERSION"] = ".NET Framework " + nameVersion + ", SP " + nameServicePack + " gefunden.";
+                            session["DOTNETFRAMEWORKVORHANDEN"] = ".NET Framework " + nameVersion + ", SP " + nameServicePack;
                         }
                     }
                 }
@@ -108,16 +110,16 @@ namespace FrameworkTest
                     else if (releaseKey >= 378675) versionValue = "4.5.1";
                     else if (releaseKey >= 378389) versionValue = "4.5";
 
-                    session["DOTNETFRAMEWORKVERSION"] = ".NET Framework " + versionValue + " gefunden.";
+                    session["DOTNETFRAMEWORKVORHANDEN"] = ".NET Framework " + versionValue;
 
                 }
             }
-
+/*
             if (session["DOTNETFRAMEWORK48"] == "0")
             {
-                session["DOTNETFRAMEWORKVERSION"] += " Erforderlich ist .NET Framework 4.8.";
+                session["DOTNETFRAMEWORKVORHANDEN"] += " Erforderlich ist .NET Framework 4.8.";
             }
-
+*/
             // Versionsnummer für .NET Core suchen:
             // Hier werden die vorhandenen Versionen mit dem Kommandozeilen-Befehl "dotnet" ermittelt.
             // Dieser Befehl gibt eine Liste aus, die zeilenweise nach Versionsnummern durchsucht wird.
@@ -175,14 +177,15 @@ namespace FrameworkTest
 
                 if (p.ExitCode != 0)
                 {
+/*
                     session["DOTNETCORE3115"] = "0";
-                    session["DOTNETCOREVERSION"] = ".NET Core nicht gefunden.";
-                    session["DOTNETCOREVERSION"] += " Erforderlich ist .NET Core 3.1.15.";
-
+                    session["DOTNETCOREVORHANDEN"] = ".NET Core nicht gefunden.";
+                    session["DOTNETCOREVORHANDEN"] += " Erforderlich ist .NET Core 3.1.15.";
+*/
                     return ActionResult.Success;
                 }
 
-                // In die Session-Variable "DOTNETCOREVERSION" wird ein String mit der gefundenen
+                // In die Session-Variable "DOTNETCOREVORHANDEN" wird ein String mit der gefundenen
                 // Versionsnummer geschrieben, der dann im Dialogfenster angezeigt wird.
 
                 int majorNumber;
@@ -230,7 +233,7 @@ namespace FrameworkTest
                         {
                             version = foundVersion;
                             versionValue = foundVersionValue;
-                            session["DOTNETCOREVERSION"] = ".NET Core " + versionValue + " gefunden.";
+                            session["DOTNETCOREVORHANDEN"] = ".NET Core " + versionValue;
                         }
                     }
                 }
@@ -242,12 +245,12 @@ namespace FrameworkTest
             {
                 session["DOTNETCORE3115"] = "1";            // grünes statt rotes Icon im WiX-Dialog anzeigen
             }
-
+/*
             if (session["DOTNETCORE3115"] == "0")
             {
-                session["DOTNETCOREVERSION"] += " Erforderlich ist .NET Core 3.1.15.";
+                session["DOTNETCOREVORHANDEN"] += " Erforderlich ist .NET Core 3.1.15.";
             }
-
+*/
             return ActionResult.Success;
         }
     }
