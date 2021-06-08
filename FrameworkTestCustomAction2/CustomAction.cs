@@ -1,7 +1,7 @@
 /******************************************************************************
  * FrameworkTestCustomAction2.cs
  * Projekt FrameworkTest / CustomAction für WiX
- * Datum: 07.06.2021
+ * Datum: 08.06.2021
  * Autor: Ralf Sasse
  * 
  ******************************************************************************/
@@ -10,20 +10,13 @@ using Microsoft.Deployment.WindowsInstaller;
 using Microsoft.Win32;
 using System;
 
-// using System.Collections.Generic;
 using System.Diagnostics;                   // für Objekte der Klassen Process und ProcessStartInfo
-// using System.Linq;
 using System.Text.RegularExpressions;
 
 namespace FrameworkTest
 {
     public class CustomActions
     {
-        public static string dotNetCoreTest = String.Empty;
-        public static string DOTNETCOREVORHANDEN = String.Empty;
-        public static string dotNetFrameworkTest = String.Empty;
-        public static string DOTNETFRAMEWORKVORHANDEN = String.Empty;
-
         public static string nameVersion = String.Empty;
         public static string nameServicePack = String.Empty;
 
@@ -34,34 +27,32 @@ namespace FrameworkTest
         [CustomAction]
         public static ActionResult FrameworkTest(Session session)
         {
-            // Definition der Variablen
+            // Vorbelegung der WiX-Variablen für den Fall, dass kein Framework gefunden wird.
 
             session["DOTNETFRAMEWORKVORHANDEN"] = ".NET Framework nicht vorhanden.";
-            session["DOTNETCOREVORHANDEN"] = ".NET Core nicht vorhanden.";
-            session["DOTNETFRAMEWORKERFORDERLICH"] = ".NET Framework 4.8";
-            session["DOTNETCOREERFORDERLICH"] = ".NET Core 3.1.15";
+            session["DOTNETCOREVORHANDEN"]      = ".NET Core nicht vorhanden.";
 
-            int releaseKey = 0;
+            int releaseKey = 0;                 // nur für .NET Framework-Versionen ab 4.5
 
             // Registry öffnen und Versionsnummern für .NET Framework suchen.
             // Für Versionen bis 4 muss ein anderes Verfahren benutzt werden als für neuere Versionen.
 
             // .NET Framework Versionen bis 4 ermitteln:
-            // Hier werden alle gefundenen Versionen innerhalb einer Schleife abgearbeitet.
+            // Hier werden alle in der Registry gefundenen Versionen innerhalb einer Schleife abgearbeitet.
             // Versionen über 4 werden übersprungen und weiter unten behandelt.
 
             using (RegistryKey registryKey = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\NET Framework Setup\NDP\"))
             {
-                foreach (string DOTNETFRAMEWORKVORHANDENKey in registryKey.GetSubKeyNames())
+                foreach (string dotNetFrameworkVorhandenKey in registryKey.GetSubKeyNames())
                 {
-                    if (DOTNETFRAMEWORKVORHANDENKey == "v4")              // .NET Framework Version >= 4.5
+                    if (dotNetFrameworkVorhandenKey == "v4")            // .NET Framework Version >= 4.5
                     {                                                   // (werden weiter unten behandelt)
                         continue;
                     }
 
-                    if (DOTNETFRAMEWORKVORHANDENKey.StartsWith("v"))      // .NET Framework Version <= 4
+                    if (dotNetFrameworkVorhandenKey.StartsWith("v"))      // .NET Framework Version <= 4
                     {
-                        RegistryKey versionKey = registryKey.OpenSubKey(DOTNETFRAMEWORKVORHANDENKey);
+                        RegistryKey versionKey = registryKey.OpenSubKey(dotNetFrameworkVorhandenKey);
 
                         // .NET Framework Versionsnummer ermitteln:
 
@@ -86,8 +77,8 @@ namespace FrameworkTest
                 }
             }
 
-            // .NET Framework Versionen ab 4.5:
-            // Hier ist keine Schleife erforderlich, denn die Registry enthält den Release-Key.
+            // .NET Framework Versionen ab 4.5 ermitteln:
+            // Hier ist keine Schleife erforderlich, denn die Registry enthält nur maximal einen Release-Key.
 
             using (RegistryKey registryKey = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\NET Framework Setup\NDP\v4\Full\"))
             {
@@ -111,15 +102,9 @@ namespace FrameworkTest
                     else if (releaseKey >= 378389) versionValue = "4.5";
 
                     session["DOTNETFRAMEWORKVORHANDEN"] = ".NET Framework " + versionValue;
-
                 }
             }
-/*
-            if (session["DOTNETFRAMEWORK48"] == "0")
-            {
-                session["DOTNETFRAMEWORKVORHANDEN"] += " Erforderlich ist .NET Framework 4.8.";
-            }
-*/
+
             // Versionsnummer für .NET Core suchen:
             // Hier werden die vorhandenen Versionen mit dem Kommandozeilen-Befehl "dotnet" ermittelt.
             // Dieser Befehl gibt eine Liste aus, die zeilenweise nach Versionsnummern durchsucht wird.
@@ -171,26 +156,17 @@ namespace FrameworkTest
 
                 p.WaitForExit();    // Warten auf Beendigung des Prozesses
 
-                // Wenn der Prozess nicht erfolgreich beendet wurde (dann wäre der ExitCode = 0),
-                // dann wird die Session-Variable "DOTNETCORE3115" des WiX-Skripts auf Null gesetzt.
-                // Als Rückgabewert wird aber trotzdem "Success" zurückgegeben.
+                // Auch wenn der Prozess nicht erfolgreich beendet wurde (dann wäre der ExitCode = 0)
+                // wird als Rückgabewert "Success" zurückgegeben. Die eigentlichen Ergebnisse dieser
+                // CustomAction stehen dann trotzdem in den WiX-Properties.
 
                 if (p.ExitCode != 0)
                 {
-/*
-                    session["DOTNETCORE3115"] = "0";
-                    session["DOTNETCOREVORHANDEN"] = ".NET Core nicht gefunden.";
-                    session["DOTNETCOREVORHANDEN"] += " Erforderlich ist .NET Core 3.1.15.";
-*/
                     return ActionResult.Success;
                 }
 
                 // In die Session-Variable "DOTNETCOREVORHANDEN" wird ein String mit der gefundenen
                 // Versionsnummer geschrieben, der dann im Dialogfenster angezeigt wird.
-
-                int majorNumber;
-                int minorNumber;
-                int revisionNumber;
 
                 string[] runtimeLines = output.Split('\n');     // output in einzelne Strings teilen; einer pro Zeile
 
@@ -206,7 +182,7 @@ namespace FrameworkTest
                     {
                         Match m = pattern.Match(runtimeLine);               // prüfen, ob Versionsnummer enthalten ist
 
-                        foundVersionValue = m.Value;                         // Versionsnummer in String-Objekt einlesen
+                        foundVersionValue = m.Value;                        // Versionsnummer in String-Objekt einlesen
 
                         // An dieser Stelle stand ursprünglich "Version.TryParse(foundVersionValue, out foundVersion)".
                         // Das funktioniert aber nur mit neueren .NET Framework-Versionen. Ich hatte zunächst diese
@@ -215,15 +191,10 @@ namespace FrameworkTest
                         // ohne Fehlermeldung abgebrochen.
                         // Die vorliegende Version "FrameworkTestCustonAction2" ist für .NET Framework 2.0 kompiliert
                         // und liefert ein korrektes Ergebnis, wenn auf dem Zielrechner 2.0 oder höher installiert ist.
-                        // Die "Version.TryParse()"-Methode habe ich hier nachprogrammiert.
-                        // Der String foundVersionValue enthält zu Beginn eine Versionsnummer im Format "3.1.15".
+                        // Statt der "Version.TryParse()"-Methode habe ich hier einen überladenen Konstruktor der Klasse
+                        // "Version" verwendet, der als Argument einen String im Format "3.1.15" akzeptiert.
 
-                        string[] myParse = foundVersionValue.Split('.');
-                        Int32.TryParse(myParse[0], out majorNumber);
-                        Int32.TryParse(myParse[1], out minorNumber);
-                        Int32.TryParse(myParse[2], out revisionNumber);
-
-                        Version foundVersion = new Version(majorNumber, minorNumber, revisionNumber);
+                        Version foundVersion = new Version(foundVersionValue);
 
                         // Die Versionsnummer soll gespeichert werden, wenn sie größer ist als die zuletzt gefundenen,
                         // aber kleiner als 5 (das wäre nicht mehr .NET Core, sondern .NET 5, und danach wird nicht gesucht.
@@ -239,18 +210,13 @@ namespace FrameworkTest
                 }
             }
 
-            // Zum Schluss wird geprüft, ob die Versionsnummer ausreicht und die WiX-Properties werden geschrieben.
+            // Zum Schluss wird geprüft, ob die Versionsnummer ausreicht und die WiX-Property wird geschrieben.
 
             if (version >= minVersion)
             {
                 session["DOTNETCORE3115"] = "1";            // grünes statt rotes Icon im WiX-Dialog anzeigen
             }
-/*
-            if (session["DOTNETCORE3115"] == "0")
-            {
-                session["DOTNETCOREVORHANDEN"] += " Erforderlich ist .NET Core 3.1.15.";
-            }
-*/
+
             return ActionResult.Success;
         }
     }
